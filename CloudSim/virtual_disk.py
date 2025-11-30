@@ -63,7 +63,7 @@ class VirtualDisk:
                 f.seek(self.capacity_bytes - 1)
                 f.write(b'\0')
                 
-        # Initialize metadata if doesn't exist
+        # Initialize Metadata if doesn't exist
         if not os.path.exists(self.metadata_file):
             metadata = {
                 "node_id": self.node_id,
@@ -176,7 +176,7 @@ class VirtualDisk:
             block.file_id = file_id
             allocated_blocks.append(block.block_id)
         
-        # Create file record
+        # Create file records
         file_checksum = hashlib.md5(f"{file_id}-{filename}-{size}".encode()).hexdigest()
         virtual_file = VirtualFile(
             file_id=file_id,
@@ -251,7 +251,7 @@ class VirtualDisk:
             remaining_bytes = size - len(data)
             bytes_to_read = min(remaining_bytes, block_size - block_offset)
             
-            # Read from disk file
+            # Read from disk files
             with open(self.disk_file, 'rb') as f:
                 f.seek(block.start_offset + block_offset)
                 chunk = f.read(bytes_to_read)
@@ -329,3 +329,4 @@ class VirtualDisk:
             }
             for b in self.blocks
         ]
+
