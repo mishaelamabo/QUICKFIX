@@ -55,7 +55,7 @@ class VirtualFileSystem:
         # Initialize root directory
         self._initialize_filesystem()
         
-        # File operations
+        # File operation
         self.open_files: Dict[str, Dict] = {}  # file_handle -> file_info
         
     def _initialize_filesystem(self):
@@ -112,11 +112,11 @@ class VirtualFileSystem:
         parent_path = os.path.dirname(path)
         file_name = os.path.basename(path)
         
-        # Check if parent directory exists
+        # Check if parent directory exist
         if parent_path not in self.files or not self.files[parent_path].is_directory:
             return False
         
-        # Allocate storage on virtual disk
+        # Allocate storage on virtual disks
         file_id = f"file_{hashlib.md5(path.encode()).hexdigest()}"
         allocated_blocks = self.virtual_disk.allocate_storage(file_id, file_name, len(content))
         
@@ -161,7 +161,7 @@ class VirtualFileSystem:
         
         file_obj = self.files[path]
         
-        # Check if we need to resize
+        # Check if we need to resizes
         if len(content) > file_obj.size:
             # Need more storage
             additional_space = len(content) - file_obj.size
@@ -621,3 +621,4 @@ class VirtualOS:
         self._log("system", "CloudOS shutdown complete")
         
         print(f"[{self.node_id}] CloudOS shutdown complete")
+
