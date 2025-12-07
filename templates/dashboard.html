@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Integrated Cloud Platform - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</head>
+
+<body class="gradient-bg min-h-screen text-white" x-data="dashboardApp()" x-init="init({{ user | tojson }})">
+  <!-- Navigation -->
+  <nav class="glass-effect border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold">☁️ Cloud Platform</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div class="flex items-center">
+            <span x-text="user.full_name || user.username"></span>
+            <span x-show="user.is_admin"
+              class="ml-2 bg-yellow-500/20 text-yellow-300 text-xs px-2 py-1 rounded">Admin</span>
+          </div>
+          <!-- Admin Toggle -->
+          <div x-show="user.is_admin" class="flex items-center space-x-2">
+            <button @click="currentView = 'user'" :class="currentView === 'user' ? 'bg-blue-500/30' : 'bg-white/20'"
+              class="px-3 py-2 rounded-lg transition text-sm">
+              User View
+            </button>
+            <button @click="currentView = 'admin'" :class="currentView === 'admin' ? 'bg-blue-500/30' : 'bg-white/20'"
+              class="px-3 py-2 rounded-lg transition text-sm">
+              Admin View
+            </button>
+          </div>
+          <button @click="logout" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+            Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Welcome Section -->
+    <div class="mb-8">
+      <h2 class="text-3xl font-bold mb-2">Welcome, <span x-text="user.full_name || user.username"></span>!</h2>
+      <p class="text-gray-300">cloud storage and distributed nodes</p>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div class="glass-effect rounded-xl p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-gray-300 text-sm">Total Nodes</p>
+            <p class="text-2xl font-bold" x-text="stats.total_nodes"></p>
+          </div>
+          <div class="text-3xl">🖥️</div>
+        </div>
+      </div>
+      <div class="glass-effect rounded-xl p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-gray-300 text-sm">Storage Used</p>
+            <p class="text-2xl font-bold" x-text="`${stats.used_storage_gb}/${stats.total_storage_gb} GB`"></p>
+          </div>
+          <div class="text-3xl">💾</div>
+        </div>
+      </div>
+      <div class="glass-effect rounded-xl p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-gray-300 text-sm">Files Stored</p>
+            <p class="text-2xl font-bold" x-text="stats.files_stored"></p>
+          </div>
+          <div class="text-3xl">📁</div>
+        </div>
+      </div>
+      <div class="glass-effect rounded-xl p-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-gray-300 text-sm">Active Transfers</p>
+            <p class="text-2xl font-bold" x-text="stats.active_transfers"></p>
+          </div>
+          <div class="text-3xl">🔄</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Your Cloud Nodes -->
+    <div class="glass-effect rounded-xl p-6 mb-8">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-semibold">Your Nodes</h3>
+        <button @click="showCreateNode = true"
+          class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-4 py-2 rounded-lg transition">
+          + Create Node
+        </button>
+      </div>
+
+      <!-- Nodes Grid -->
+      <div class="space-y-4">
+        <template x-for="node in nodes" :key="node.node_id">
+          <div class="bg-white/10 rounded-lg p-4 border border-white/20">
+            <div class="flex justify-between items-start mb-3">
+              <h4 class="font-semibold" x-text="node.node_id"></h4>
+              <span class="bg-green-500/20 text-green-300 text-xs px-2 py-1 rounded">Active</span>
+            </div>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-300">IP:Port:</span>
+                <span x-text="`${node.ip}:${node.port}`"></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Uptime:</span>
+                <span x-text="formatUptime(node.uptime)"></span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-300">Storage:</span>
+                <span x-text="`${node.storage.allocated_blocks}/${node.storage.total_blocks} blocks`"></span>
+              </div>
+            </div>
+            <div class="mt-3 flex space-x-2">
+              <button @click="manageNode(node)"
+                class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition">
+                Manage
+              </button>
+              <button @click="viewNodeDetails(node)"
+                class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm transition">
+                Details
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Empty State -->
+      <div x-show="nodes.length === 0" class="text-center py-12">
+        <p class="text-gray-400 mb-4">No cloud nodes created yet</p>
+        <button @click="showCreateNode = true"
+          class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-6 py-2 rounded-lg transition">
+          Create Your First Node
+        </button>
+      </div>
+    </div>
+
+    <!-- File Operations -->
+    <div class="glass-effect rounded-xl p-6 mb-8">
+      <h3 class="text-xl font-semibold mb-6">File Operations</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white/10 rounded-lg p-4 text-center hover:bg-white/20 transition cursor-pointer"
+          @click="showFileUpload = true">
+          <div class="text-3xl mb-2">📤</div>
+          <h4 class="font-semibold">Upload File</h4>
+          <p class="text-sm text-gray-300">Distribute files across nodes</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-4 text-center hover:bg-white/20 transition cursor-pointer"
+          @click="showFileBrowser = true">
+          <div class="text-3xl mb-2">📁</div>
+          <h4 class="font-semibold">Browse Files</h4>
+          <p class="text-sm text-gray-300">View your stored files</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-4 text-center hover:bg-white/20 transition cursor-pointer"
+          @click="showFileSharing = true">
+          <div class="text-3xl mb-2">🔗</div>
+          <h4 class="font-semibold">Share Files</h4>
+          <p class="text-sm text-gray-300">Share with other users</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Account Settings -->
+    <div class="glass-effect rounded-xl p-6">
+      <h3 class="text-xl font-semibold mb-6">Account Settings</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h4 class="font-semibold mb-3">Profile Information</h4>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">Full Name</label>
+              <input type="text" x-model="profileForm.full_name"
+                class="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">Email</label>
+              <input type="email" x-model="profileForm.email"
+                class="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">Phone</label>
+              <input type="tel" x-model="profileForm.phone"
+                class="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50">
+            </div>
+          </div>
+        </div>
+        <!-- <div>
+          <h4 class="font-semibold mb-3">Preferences</h4>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="text-sm font-medium text-gray-300">Email Notifications</label>
+              <input type="checkbox" x-model="profileForm.notifications"
+                class="w-4 h-4 rounded bg-white/20 border border-white/30">
+            </div> -->
+        <!-- <div class="flex items-center justify-between">
+              <label class="text-sm font-medium text-gray-300">Theme</label>
+              <select x-model="profileForm.theme" @change="updateTheme"
+                class="px-3 py-1 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="auto">Auto</option>
+              </select>
+            </div> -->
+        <!-- <div class="flex items-center justify-between"> -->
+        <!-- <label class="text-sm font-medium text-gray-300">Language</label> -->
+        <!-- <select x-model="profileForm.language" @change="updateLanguage" -->
+        <!-- class="px-3 py-1 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50"> -->
+        <!-- <option value="en">English</option> -->
+        <!-- <option value="fr">Français</option> -->
+        <!-- <option value="es">Español</option> -->
+        <!-- </select> -->
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="mt-6">
+    <button @click="updateProfile" :disabled="updatingProfile"
+      class="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 px-6 py-2 rounded-lg transition disabled:opacity-50">
+      <span x-show="!updatingProfile">Save Changes</span>
+      <span x-show="updatingProfile">Saving...</span>
+    </button>
+  </div>
+  </div>
+  </div>
+
+  <!-- Create Node Modal -->
+  <div x-show="showCreateNode" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-xl p-6 w-full max-w-md">
+      <h3 class="text-xl font-semibold mb-4">Create New Cloud Node</h3>
+      <form @submit.prevent="createNode">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Storage Capacity (GB)</label>
+          <input type="number" x-model="newNodeCapacity" min="1" max="10" required
+            class="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50">
+        </div>
+        <div class="flex space-x-3">
+          <button type="submit" :disabled="creatingNode"
+            class="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 py-2 rounded-lg transition disabled:opacity-50">
+            <span x-show="!creatingNode">Create Node</span>
+            <span x-show="creatingNode">Creating...</span>
+          </button>
+          <button type="button" @click="showCreateNode = false; creatingNode = false"
+            class="flex-1 bg-white/20 hover:bg-white/30 py-2 rounded-lg transition">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- File Upload Modal -->
+  <div x-show="showFileUpload" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-xl p-6 w-full max-w-md">
+      <h3 class="text-xl font-semibold mb-4">Upload File</h3>
+      <form @submit.prevent="uploadFile" enctype="multipart/form-data">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Select File</label>
+          <input type="file" id="fileInput" @change="handleFileSelect" required
+            class="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/20 file:text-white">
+        </div>
+        <div x-show="selectedFile" class="mb-4 text-sm text-gray-300">
+          Selected: <span x-text="selectedFile"></span>
+        </div>
+        <div class="flex space-x-3">
+          <button type="submit" :disabled="uploadingFile"
+            class="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 py-2 rounded-lg transition disabled:opacity-50">
+            <span x-show="!uploadingFile">Upload</span>
+            <span x-show="uploadingFile">Uploading...</span>
+          </button>
+          <button type="button" @click="showFileUpload = false; uploadingFile = false; selectedFile = null"
+            class="flex-1 bg-white/20 hover:bg-white/30 py-2 rounded-lg transition">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- File Browser Modal -->
+  <div x-show="showFileBrowser" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+      <h3 class="text-xl font-semibold mb-4">Your Files</h3>
+      <div class="mb-4">
+        <button @click="loadFiles" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+          Refresh Files
+        </button>
+      </div>
+      <div class="space-y-2">
+        <template x-for="file in userFiles" :key="file.id">
+          <div class="bg-white/10 rounded-lg p-3 flex justify-between items-center">
+            <div>
+              <h4 class="font-semibold" x-text="file.name"></h4>
+              <p class="text-sm text-gray-300" x-text="`${file.size} bytes • ${file.date}`"></p>
+            </div>
+            <div class="flex space-x-2">
+              <button @click="downloadFile(file)" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm">
+                Download
+              </button>
+              <button @click="shareFile(file)" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded text-sm">
+                Share
+              </button>
+            </div>
+          </div>
+        </template>
+        <div x-show="userFiles.length === 0" class="text-center py-8 text-gray-400">
+          No files uploaded yet
+        </div>
+      </div>
+      <div class="mt-4">
+        <button @click="showFileBrowser = false" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Sharing Modal -->
+  <div x-show="showFileSharing" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+      <h3 class="text-xl font-semibold mb-4">File Sharing</h3>
+      <div class="mb-4">
+        <button @click="loadShares" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+          Refresh Shares
+        </button>
+      </div>
+      <div class="space-y-2">
+        <template x-for="share in fileShares" :key="share.id">
+          <div class="bg-white/10 rounded-lg p-3">
+            <div class="flex justify-between items-start">
+              <div>
+                <h4 class="font-semibold" x-text="share.file_name"></h4>
+                <p class="text-sm text-gray-300">Shared with: <span x-text="share.shared_with"></span></p>
+                <p class="text-sm text-gray-300">Permissions: <span x-text="share.permissions"></span></p>
+              </div>
+              <button @click="removeShare(share)" class="bg-red-500/20 hover:bg-red-500/30 px-3 py-1 rounded text-sm">
+                Remove
+              </button>
+            </div>
+          </div>
+        </template>
+        <div x-show="fileShares.length === 0" class="text-center py-8 text-gray-400">
+          No shared files
+        </div>
+      </div>
+      <div class="mt-4">
+        <button @click="showFileSharing = false" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div x-show="message" x-text="message"
+    :class="messageType === 'error' ? 'bg-red-500/20 text-red-200 border-red-500/30' : 'bg-green-500/20 text-green-200 border-green-500/30'"
+    class="fixed bottom-4 right-4 p-4 rounded-lg border max-w-md z-50"></div>
+
+</body>
+
+</html>

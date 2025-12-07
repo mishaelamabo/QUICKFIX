@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Integrated Cloud Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+  <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</head>
+
+<body class="gradient-bg min-h-screen text-white" x-data="adminApp()" x-init="init({{ user | tojson }})">
+  <!-- Navigation -->
+  <nav class="glass-effect border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold">🔧 Admin Panel - Cloud Platform</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span x-text="user.full_name || user.username"></span>
+          <a href="/user-dashboard" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+            User Dashboard
+          </a>
+          <button @click="logout" class="bg-red-500/20 hover:bg-red-500/30 px-4 py-2 rounded-lg transition">
+            Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- System Overview -->
+    <div class="glass-effect rounded-xl p-6 mb-8">
+      <h2 class="text-2xl font-bold mb-6">System Overview</h2>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white/10 rounded-lg p-4">
+          <p class="text-gray-300 text-sm">Total Users</p>
+          <p class="text-3xl font-bold" x-text="metrics.total_users"></p>
+          <p class="text-sm text-green-400">+<span x-text="metrics.active_users"></span> active</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-4">
+          <p class="text-gray-300 text-sm">Total Nodes</p>
+          <p class="text-3xl font-bold" x-text="metrics.total_nodes"></p>
+          <p class="text-sm text-blue-400">Running</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-4">
+          <p class="text-gray-300 text-sm">System Uptime</p>
+          <p class="text-3xl font-bold" x-text="formatUptime(metrics.system_uptime)"></p>
+          <p class="text-sm text-gray-400">Days</p>
+        </div>
+        <div class="bg-white/10 rounded-lg p-4">
+          <p class="text-gray-300 text-sm">Active Transfers</p>
+          <p class="text-3xl font-bold" x-text="metrics.active_transfers"></p>
+          <p class="text-sm text-yellow-400">In progress</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Section
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+      <div class="glass-effect rounded-xl p-6">
+        <h3 class="text-xl font-semibold mb-4">User Growth</h3>
+        <canvas id="userGrowthChart" width="400" height="200"></canvas>
+      </div>
+      <div class="glass-effect rounded-xl p-6">
+        <h3 class="text-xl font-semibold mb-4">Resource Utilization</h3>
+        <canvas id="resourceChart" width="400" height="200"></canvas>
+      </div>
+    </div> -->
+
+    <!-- User Management -->
+    <div class="glass-effect rounded-xl p-6 mb-8">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-semibold">User Management</h3>
+        <div class="flex space-x-3">
+          <input type="text" x-model="userSearch" @input="filterUsers" placeholder="Search users..."
+            class="px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white/50">
+          <button @click="refreshUsers" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Users Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-white/20">
+              <th class="text-left py-3 px-4">Username</th>
+              <th class="text-left py-3 px-4">Email</th>
+              <th class="text-left py-3 px-4">Status</th>
+              <th class="text-left py-3 px-4">Storage Quota</th>
+              <th class="text-left py-3 px-4">Last Login</th>
+              <th class="text-left py-3 px-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="user in filteredUsers" :key="user.username">
+              <tr class="border-b border-white/10 hover:bg-white/5">
+                <td class="py-3 px-4">
+                  <div class="flex items-center">
+                    <span x-text="user.username"></span>
+                    <span x-show="user.is_admin"
+                      class="ml-2 bg-yellow-500/20 text-yellow-300 text-xs px-2 py-1 rounded">Admin</span>
+                  </div>
+                </td>
+                <td class="py-3 px-4" x-text="user.email"></td>
+                <td class="py-3 px-4">
+                  <span :class="user.is_active ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'"
+                    class="text-xs px-2 py-1 rounded">
+                    <span x-text="user.is_active ? 'Active' : 'Inactive'"></span>
+                  </span>
+                </td>
+                <td class="py-3 px-4">
+                  <span x-text="user.storage_quota_gb"></span> GB
+                </td>
+                <td class="py-3 px-4">
+                  <span x-show="user.last_login" x-text="formatDate(user.last_login)"></span>
+                  <span x-show="!user.last_login" class="text-gray-400">Never</span>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="flex space-x-2">
+                    <button @click="editUserQuota(user)"
+                      class="bg-blue-500/20 hover:bg-blue-500/30 px-3 py-1 rounded text-sm transition">
+                      Edit Quota
+                    </button>
+                    <button @click="toggleUserStatus(user)"
+                      :class="user.is_active ? 'bg-red-500/20 hover:bg-red-500/30' : 'bg-green-500/20 hover:bg-green-500/30'"
+                      class="px-3 py-1 rounded text-sm transition">
+                      <span x-text="user.is_active ? 'Deactivate' : 'Activate'"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Node Management -->
+    <div class="glass-effect rounded-xl p-6 mb-8">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-semibold">Node Management</h3>
+        <div class="flex items-center space-x-3">
+          <div class="text-sm text-gray-300">
+            <span x-text="nodes.length"></span> total nodes |
+            <span x-text="nodes.filter(n => n.status === 'active').length"></span> active
+          </div>
+          <input type="text" x-model="nodeSearch" @input="filterNodes" placeholder="Search nodes..."
+            class="px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white/50">
+          <button @click="loadNodes" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Nodes Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-white/20">
+              <th class="text-left py-3 px-4">Node ID</th>
+              <th class="text-left py-3 px-4">Username</th>
+              <th class="text-left py-3 px-4">IP:Port</th>
+              <th class="text-left py-3 px-4">Status</th>
+              <th class="text-left py-3 px-4">Storage Used</th>
+              <th class="text-left py-3 px-4">Files</th>
+              <th class="text-left py-3 px-4">Uptime</th>
+              <th class="text-left py-3 px-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="node in filteredNodes" :key="node.node_id">
+              <tr class="border-b border-white/10 hover:bg-white/5">
+                <td class="py-3 px-4">
+                  <div class="flex items-center">
+                    <div class="w-2 h-2 rounded-full mr-2"
+                      :class="node.status === 'active' ? 'bg-green-400' : 'bg-red-400'"></div>
+                    <span x-text="node.node_id" class="font-mono text-sm"></span>
+                  </div>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="flex items-center">
+                    <span x-text="node.username"></span>
+                    <span x-show="node.username === user.username"
+                      class="ml-2 bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded">You</span>
+                  </div>
+                </td>
+                <td class="py-3 px-4">
+                  <span x-text="`${node.ip || 'N/A'}:${node.port || 'N/A'}`" class="font-mono text-sm"></span>
+                </td>
+                <td class="py-3 px-4">
+                  <span
+                    :class="node.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'"
+                    class="text-xs px-2 py-1 rounded capitalize">
+                    <span x-text="node.status"></span>
+                  </span>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="text-sm">
+                    <span x-text="`${(node.storage?.used_storage_gb || 0).toFixed(2)} GB`"></span>
+                    <div class="text-xs text-gray-400">
+                      of <span x-text="`${node.storage?.capacity_gb || 0} GB`"></span>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-3 px-4">
+                  <span x-text="node.storage?.files_stored || 0" class="text-sm"></span>
+                </td>
+                <td class="py-3 px-4">
+                  <span x-text="formatUptime(node.uptime || 0)" class="text-sm"></span>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="flex space-x-2">
+                    <button @click="viewNodeDetails(node)"
+                      class="bg-blue-500/20 hover:bg-blue-500/30 px-3 py-1 rounded text-sm transition">
+                      Details
+                    </button>
+                    <button @click="deleteNode(node)"
+                      class="bg-red-500/20 hover:bg-red-500/30 px-3 py-1 rounded text-sm transition">
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+
+        <!-- Empty State -->
+        <div x-show="filteredNodes.length === 0" class="text-center py-12">
+          <div class="text-gray-400 mb-4">
+            <div class="text-6xl mb-4">🖥️</div>
+            <p class="text-lg">No nodes found</p>
+            <p class="text-sm">Nodes will appear here when users create them</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- System Analytics -->
+    <div class="glass-effect rounded-xl p-6 mb-8">
+      <h3 class="text-xl font-semibold mb-6">System Analytics</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div>
+          <h4 class="font-semibold mb-3">User Activity</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between">
+              <span class="text-gray-300">Daily Active Users</span>
+              <span x-text="analytics.daily_active_users"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-300">Weekly Signups</span>
+              <span x-text="analytics.weekly_signups"></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-300">Total Logins Today</span>
+              <span x-text="analytics.daily_logins"></span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-3">Storage Analytics</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between">
+              <span class="text-gray-300">Total Storage Used</span>
+              <span x-text="analytics.total_storage_used_gb.toFixed(2)"></span> GB
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-300">Average Storage per User</span>
+              <span x-text="analytics.avg_storage_per_user.toFixed(2)"></span> GB
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-300">Files Stored System-wide</span>
+              <span x-text="analytics.total_files_stored"></span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-3">Performance Metrics</h4>
+          <div class="space-y-2">
+            <div class="flex justify-between">
+              <span class="text-gray-300">Avg Response Time</span>
+              <span x-text="analytics.avg_response_time_ms"></span> ms
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-300">CPU Usage</span>
+              <span x-text="analytics.cpu_usage_percent"></span>%
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-300">Memory Usage</span>
+              <span x-text="analytics.memory_usage_percent"></span>%
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resource Allocation -->
+    <div class="glass-effect rounded-xl p-6">
+      <h3 class="text-xl font-semibold mb-6">Resource Allocation per User</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h4 class="font-semibold mb-3">Top Storage Consumers</h4>
+          <div class="space-y-2">
+            <template x-for="user in topStorageUsers" :key="user.username">
+              <div class="flex justify-between items-center">
+                <span x-text="user.username"></span>
+                <div class="flex items-center">
+                  <div class="w-24 bg-white/20 rounded-full h-2 mr-2">
+                    <div class="bg-blue-500 h-2 rounded-full" :style="`width: ${user.usage_percentage}%`"></div>
+                  </div>
+                  <span x-text="user.storage_used_gb.toFixed(1)"></span> GB
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-3">Node Distribution</h4>
+          <div class="space-y-2">
+            <template x-for="user in topNodeUsers" :key="user.username">
+              <div class="flex justify-between items-center">
+                <span x-text="user.username"></span>
+                <span class="bg-white/20 px-2 py-1 rounded text-sm">
+                  <span x-text="user.node_count"></span> nodes
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit User Quota Modal -->
+  <div x-show="showEditQuota" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-effect rounded-xl p-6 w-full max-w-md">
+      <h3 class="text-xl font-semibold mb-4">Edit User Quota</h3>
+      <div class="mb-4">
+        <p class="text-gray-300 mb-2">User: <span x-text="selectedUser?.username"></span></p>
+        <p class="text-gray-300 mb-4">Current quota: <span x-text="selectedUser?.storage_quota_gb"></span> GB</p>
+      </div>
+      <form @submit.prevent="updateUserQuota">
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">New Storage Quota (GB)</label>
+          <input type="number" x-model="newQuota" min="1" max="100" required
+            class="w-full px-4 py-2 rounded-lg bg-white/20 border border-white/30 text-white focus:outline-none focus:ring-2 focus:ring-white/50">
+        </div>
+        <div class="flex space-x-3">
+          <button type="submit" :disabled="updatingQuota"
+            class="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 py-2 rounded-lg transition disabled:opacity-50">
+            <span x-show="!updatingQuota">Update Quota</span>
+            <span x-show="updatingQuota">Updating...</span>
+          </button>
+          <button type="button" @click="showEditQuota = false; updatingQuota = false"
+            class="flex-1 bg-white/20 hover:bg-white/30 py-2 rounded-lg transition">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div x-show="message" x-text="message"
+    :class="messageType === 'error' ? 'bg-red-500/20 text-red-200 border-red-500/30' : 'bg-green-500/20 text-green-200 border-green-500/30'"
+    class="fixed bottom-4 right-4 p-4 rounded-lg border max-w-md z-50"></div>
+
+</body>
+
+</html>
